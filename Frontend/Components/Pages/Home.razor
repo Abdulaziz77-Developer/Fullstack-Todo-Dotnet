@@ -2,6 +2,70 @@
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
 
-Welcome to your new app.
+<div class="hero-section text-center py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="mb-4">
+                    <i class="bi bi-check2-circle text-primary shadow-sm" style="font-size: 4rem;"></i>
+                </div>
+                <h1 class="display-4 fw-bold text-dark mb-3">Управляйте задачами эффективно</h1>
+                <p class="lead text-muted mb-5">
+                    Minimal API Todo — это современный инструмент для организации рабочего процесса. 
+                    Назначайте задачи, отслеживайте прогресс и достигайте целей вместе с командой.
+                </p>
+                
+                <div class="d-flex gap-3 justify-content-center">
+                    <a href="my-todos" class="btn btn-primary btn-lg px-4 rounded-pill shadow-sm">
+                        <i class="bi bi-play-fill me-2"></i> Мои задачи
+                    </a>
+                    <a href="admin-dashboard" class="btn btn-outline-dark btn-lg px-4 rounded-pill">
+                        <i class="bi bi-shield-shaded me-2"></i> Админ-панель
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-5 g-4">
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm rounded-4 p-3">
+                    <div class="card-body">
+                        <div class="text-primary mb-3"><i class="bi bi-lightning-charge fs-2"></i></div>
+                        <h5 class="fw-bold">Скорость</h5>
+                        <p class="text-muted small">Построено на .NET 8 Minimal API для максимальной производительности.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm rounded-4 p-3">
+                    <div class="card-body">
+                        <div class="text-success mb-3"><i class="bi bi-lock fs-2"></i></div>
+                        <h5 class="fw-bold">Безопасность</h5>
+                        <p class="text-muted small">Авторизация на базе JWT токенов с разделением ролей доступа.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm rounded-4 p-3">
+                    <div class="card-body">
+                        <div class="text-info mb-3"><i class="bi bi-window-stack fs-2"></i></div>
+                        <h5 class="fw-bold">Интерфейс</h5>
+                        <p class="text-muted small">Адаптивный дизайн на Blazor и Bootstrap для любых устройств.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .hero-section {
+        background: radial-gradient(circle at top right, #f8f9fa, #e9ecef);
+        min-height: 80vh;
+        display: flex;
+        align-items: center;
+    }
+    .rounded-4 { border-radius: 1.25rem !important; }
+    .btn-lg { font-size: 1.1rem; font-weight: 500; }
+</style>
