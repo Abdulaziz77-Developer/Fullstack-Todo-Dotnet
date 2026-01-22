@@ -54,7 +54,7 @@ public class AdminService
     public async Task<List<UserDto>> GetAllUsersAsync()
     {
         await SetAuthHeader();
-        return await _http.GetFromJsonAsync<List<UserDto>>("api/users") ?? new(); 
+        return await _http.GetFromJsonAsync<List<UserDto>>("users") ?? new(); 
     }
 
     // Обновить задачу

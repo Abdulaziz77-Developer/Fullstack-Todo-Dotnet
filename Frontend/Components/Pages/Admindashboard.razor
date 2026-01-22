@@ -1,6 +1,8 @@
 @page "/admin-dashboard"
 @using Frontend.Services
 @using Frontend.Models
+@using System.IdentityModel.Tokens.Jwt
+@using System.Security.Claims
 @inject AdminService AdminService
 @inject NavigationManager Navigation
 @inject Blazored.LocalStorage.ILocalStorageService LocalStorage
@@ -9,7 +11,15 @@
 <div class="admin-wrapper">
     <div class="container py-5">
         
-        @* HEADER *@
+        @if (!string.IsNullOrEmpty(debugError))
+        {
+            <div class="alert alert-danger shadow-sm rounded-4 animate-pop">
+                <h5 class="fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Ошибка</h5>
+                <p class="mb-0">@debugError</p>
+                <button class="btn btn-sm btn-outline-danger mt-2" @onclick='() => debugError = ""'>Закрыть</button>
+            </div>
+        }
+
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h1 class="fw-bold text-dark mb-1">Панель администратора</h1>
@@ -25,7 +35,7 @@
             </div>
         </div>
 
-        @* SEARCH BAR *@
+        @* Поиск *@
         <div class="card border-0 shadow-sm mb-4 rounded-4">
             <div class="card-body p-2">
                 <div class="input-group">
@@ -36,7 +46,6 @@
             </div>
         </div>
 
-        @* CREATE FORM (Показывается при нажатии +) *@
         @if (showCreateForm)
         {
             <div class="card border-0 shadow mb-4 rounded-4 animate-fade-in">
@@ -56,7 +65,7 @@
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <button class="btn btn-success w-100" @onclick="CreateTodo">Создать</button>
+                            <button class="btn btn-success w-100 shadow-sm" @onclick="CreateTodo">Создать</button>
                         </div>
                     </div>
                 </div>
@@ -67,6 +76,7 @@
         {
             <div class="text-center py-5">
                 <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3 text-muted fw-medium">Синхронизация с сервером...</p>
             </div>
         }
         else
@@ -86,8 +96,9 @@
                             <tr>
                                 <td class="p-3">
                                     <div class="fw-bold">@todo.Title</div>
-                                    @if (todo.IsCompleted) { <span class="badge bg-success">Готово</span> }
-                                    else { <span class="badge bg-warning text-dark">В работе</span> }
+                                    <span class="badge @(todo.IsCompleted ? "bg-success" : "bg-warning text-dark")">
+                                        @(todo.IsCompleted ? "Готово" : "В работе")
+                                    </span>
                                 </td>
                                 <td class="p-3 text-muted">@todo.UserName</td>
                                 <td class="p-3 text-end">
@@ -107,24 +118,24 @@
     </div>
 </div>
 
-@* MODAL FOR EDIT *@
+@* --- ВОТ ЭТОТ БЛОК НУЖНО ДОБАВИТЬ ДЛЯ РАБОТЫ EDIT --- *@
 @if (showEditModal)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal show d-block animate-pop" tabindex="-1">
+    <div class="modal show d-block" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4">
-                <div class="modal-header border-0">
+                <div class="modal-header border-0 pb-0">
                     <h5 class="modal-title fw-bold">Редактировать задачу</h5>
                     <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
                 </div>
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label class="form-label small text-muted">Название</label>
-                        <input class="form-control" @bind="editingTodo.Title" />
+                        <label class="form-label text-muted small fw-bold">Название задачи</label>
+                        <input class="form-control" @bind="editingTodo.Title" placeholder="Введите название..." />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small text-muted">Владелец</label>
+                        <label class="form-label text-muted small fw-bold">Исполнитель</label>
                         <select class="form-select" @bind="editingTodoUserId">
                             @foreach (var user in allUsers)
                             {
@@ -133,27 +144,32 @@
                         </select>
                     </div>
                 </div>
-                <div class="modal-footer border-0">
-                    <button class="btn btn-light" @onclick="CloseEditModal">Отмена</button>
-                    <button class="btn btn-primary px-4" @onclick="UpdateTodo">Сохранить</button>
+                <div class="modal-footer border-0 pt-0">
+                    <button class="btn btn-light rounded-3" @onclick="CloseEditModal">Отмена</button>
+                    <button class="btn btn-primary px-4 rounded-3 shadow-sm" @onclick="UpdateTodo">Сохранить</button>
                 </div>
             </div>
         </div>
     </div>
 }
 
+<style>
+    .modal-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 1040; }
+    .modal { z-index: 1050; }
+    .rounded-4 { border-radius: 1rem !important; }
+</style>
+
 @code {
     private List<TodoAdminResponseDto> allTodos = new();
-    private List<UserDto> allUsers = new(); // Для Select
+    private List<UserDto> allUsers = new();
     private bool isLoading = true;
     private string searchQuery = "";
-    
-    // Create state
+    private string debugError = ""; 
+
     private bool showCreateForm = false;
     private string newTodoTitle = "";
     private int selectedUserId;
-
-    // Edit state
+    
     private bool showEditModal = false;
     private TodoAdminResponseDto editingTodo = new();
     private int editingTodoUserId;
@@ -164,16 +180,47 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) { await LoadData(); }
+        if (firstRender)
+        {
+            await Task.Delay(200); 
+            await CheckAccess();
+        }
     }
 
-    private async Task LoadData()
+    private async Task CheckAccess()
+    {
+        try
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            if (string.IsNullOrEmpty(token)) { Navigation.NavigateTo("/login"); return; }
+
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            var role = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role || c.Type == "role")?.Value;
+
+            if (role != "Admin") { Navigation.NavigateTo("/my-todos"); return; }
+
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            debugError = "Критическая ошибка: " + ex.Message;
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
     {
         isLoading = true;
-        try {
+        StateHasChanged();
+        try 
+        {
             allTodos = await AdminService.GetAllTodosAsync();
-            allUsers = await AdminService.GetAllUsersAsync(); // Загружаем список юзеров для select
-        } catch { Navigation.NavigateTo("/login"); }
+            allUsers = await AdminService.GetAllUsersAsync();
+            debugError = ""; 
+        }
+        catch (Exception ex) { debugError = "Ошибка загрузки: " + ex.Message; }
         finally { isLoading = false; StateHasChanged(); }
     }
 
@@ -181,24 +228,26 @@
 
     private async Task CreateTodo()
     {
-        if (string.IsNullOrEmpty(newTodoTitle) || selectedUserId == 0) return;
+        if (string.IsNullOrWhiteSpace(newTodoTitle) || selectedUserId == 0) return;
         var success = await AdminService.CreateTodoAsync(newTodoTitle, selectedUserId);
-        if (success) { 
-            newTodoTitle = ""; 
-            showCreateForm = false;
-            await LoadData(); 
-        }
+        if (success) { newTodoTitle = ""; showCreateForm = false; await RefreshData(); }
     }
 
     private async Task DeleteTodo(int id)
     {
-        if (await AdminService.DeleteTodoAsync(id)) await LoadData();
+        if (await AdminService.DeleteTodoAsync(id)) await RefreshData();
+        else debugError = "Не удалось удалить задачу.";
     }
 
     private void OpenEditModal(TodoAdminResponseDto todo)
     {
-        editingTodo = new TodoAdminResponseDto { Id = todo.Id, Title = todo.Title, UserName = todo.UserName };
-        // Находим Id пользователя по имени (или храни его в DTO)
+        editingTodo = new TodoAdminResponseDto 
+        { 
+            Id = todo.Id, 
+            Title = todo.Title, 
+            UserName = todo.UserName, 
+            IsCompleted = todo.IsCompleted 
+        };
         editingTodoUserId = allUsers.FirstOrDefault(u => u.UserName == todo.UserName)?.Id ?? 0;
         showEditModal = true;
     }
@@ -207,26 +256,15 @@
 
     private async Task UpdateTodo()
     {
-        if (await AdminService.UpdateTodoAsync(editingTodo.Id, editingTodo.Title, editingTodoUserId))
-        {
-            showEditModal = false;
-            await LoadData();
-        }
+        if (string.IsNullOrWhiteSpace(editingTodo.Title) || editingTodoUserId == 0) return;
+        var success = await AdminService.UpdateTodoAsync(editingTodo.Id, editingTodo.Title, editingTodoUserId);
+        if (success) { showEditModal = false; await RefreshData(); }
+        else debugError = "Ошибка при обновлении задачи.";
     }
 
     private async Task Logout()
     {
         await LocalStorage.RemoveItemAsync("authToken");
-        Navigation.NavigateTo("/login");
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }
-
-<style>
-    .admin-wrapper { background-color: #f4f7f6; min-height: 100vh; }
-    .rounded-4 { border-radius: 1.2rem !important; }
-    .animate-fade-in { animation: fadeIn 0.4s ease; }
-    .animate-pop { animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    .modal-backdrop { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
-    @@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-    @@keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-</style>

@@ -10,6 +10,11 @@ namespace Backend.EndPoints
     {
         public static void MapTodoEndPoints(this WebApplication app)
         {
+            app.MapGet("/users", async (AppDbContext db) => 
+                await db.Users
+                .Select(u => new UserDto { Id = u.Id, UserName = u.UserName })
+                .ToListAsync())
+                .RequireAuthorization();
             var group = app.MapGroup("/todos").RequireAuthorization();
 
             group.MapGet("/todos/{username}", async (string username, TodoRepository repository) =>
@@ -17,7 +22,11 @@ namespace Backend.EndPoints
                 var todos = await repository.GetTodosByNameAsync(username);
                 return Results.Ok(todos);
             });
-
+            // group.MapGet("/users", async (ClaimsPrincipal user, TodoRepository repository) =>
+            // {
+            //     var users = repository.GetTodosAdmin();
+            //     return Results.Ok(users);
+            // });
             group.MapGet("/user", async (ClaimsPrincipal user, TodoRepository repository) =>
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
