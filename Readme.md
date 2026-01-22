@@ -36,7 +36,7 @@ A modern, full-stack Task Management System built with **.NET 8**, featuring a d
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/your-username/minimal-api-todo.git](https://github.com/your-username/minimal-api-todo.git)
+   (https://github.com/Abdulaziz77-Developer/Fullstack-Todo-Dotnet.git)
     cd minimal-api-todo
     ```
 
