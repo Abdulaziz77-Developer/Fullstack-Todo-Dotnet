@@ -1,94 +1,141 @@
-using MinimalApiTodo;
+
+// using MinimalApiTodo.Data;
+// using Microsoft.EntityFrameworkCore;
+// using Microsoft.AspNetCore.Authentication.JwtBearer;
+// using Microsoft.IdentityModel.Tokens;
+// using System.Text;
+// using MinimalApiTodo.EndPoints;
+
+// var builder = WebApplication.CreateBuilder(args);
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen();
+// builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+//     .AddJwtBearer(options =>
+//     {
+//         options.TokenValidationParameters = new TokenValidationParameters
+//         {
+//             ValidateIssuer = true,
+//             ValidateAudience = true,
+//             ValidateLifetime = true,
+//             ValidateIssuerSigningKey = true,
+//             ValidIssuer = builder.Configuration["Jwt:Issuer"],
+//             ValidAudience = builder.Configuration["Jwt:Audience"],
+//             IssuerSigningKey = new SymmetricSecurityKey(
+//                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+//         };
+//     });
+// builder.Services.AddScoped<TodoRepository>();
+// builder.Services.AddAuthorization();
+// builder.Services.AddDbContext<AppDbContext>(options =>
+// {
+//     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+// });
+// var app = builder.Build();
+// if (app.Environment.IsDevelopment())
+// {
+//     app.UseSwagger();
+//     app.UseSwaggerUI();
+// }
+
+// app.Use(async (context, next) =>
+// {
+//     Console.WriteLine($"{context.Request.Method} {context.Request.Path}");
+//     await next();
+// });
+// app.UseAuthentication();
+// app.UseAuthorization();
+// app.MapTodoEndPoints();
+// app.Run();
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models; // Для OpenApiInfo и Security моделей
+using MinimalApiTodo.Data;
+using MinimalApiTodo.EndPoints;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- 1. СЕРВИСЫ И SWAGGER ---
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // Настройка информации об API
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Todo API", Version = "v1" });
+
+    // Описываем схему безопасности (JWT)
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Введите токен. Пример: Bearer 12345abcdef"
+    });
+
+    // Делаем замок активным для всех эндпоинтов
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// --- 2. АУТЕНТИФИКАЦИЯ ---
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+    });
+
+// --- 3. ОСТАЛЬНЫЕ СЕРВИСЫ ---
+builder.Services.AddScoped<TodoRepository>();
+builder.Services.AddAuthorization();
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
+
 var app = builder.Build();
+
+// --- 4. MIDDLEWARE ---
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-List<TodoItem>? todoItems = new List<TodoItem>
-{
-    new TodoItem()
-    {
-        Id = 1,
-        Title = "Did the home work",
-        IsCompleted = true,
-    },
-    new TodoItem()
-    {
-        Id = 2,
-        Title = "Test To do 2",
-        IsCompleted = false
-    },
-    new TodoItem()
-    {
-        Id = 3,
-        Title = "Todo 3 ",
-        IsCompleted = false
-    }
-};
 app.Use(async (context, next) =>
 {
-    Console.WriteLine($"{context.Request.Method} {context.Request.Path}");
+    Console.WriteLine($"[LOG]: {context.Request.Method} {context.Request.Path}");
     await next();
 });
-app.MapGet("/todos/{id}", async (int id) => {
- var todo = todoItems.FirstOrDefault(t => t.Id == id);
-return todo is null ? Results.NotFound() : Results.Ok(todo);
 
-});
-app.MapGet("/todos", async () => {
-    var todos = todoItems.ToList();
-    return Results.Ok(todos);
-});
-app.MapPost("/todos", (TodoItem todo) =>
-{
-    try
-    {
-        if (string.IsNullOrWhiteSpace(todo.Title) || todo.Title.Length < 3)
-        {
-            return Results.BadRequest("Title must be at least 3 characters");
-        }
+app.UseAuthentication();
+app.UseAuthorization();
 
-        todo.Id = todoItems.Max(t => t.Id) + 1;
-        todoItems.Add(todo);
+// РЕГИСТРАЦИЯ ЭНДПОИНТОВ
+app.MapAuthEndpoints(builder.Configuration); // Эндпоинты логина и регистрации
+app.MapTodoEndPoints();
 
-        return Results.Created($"/todos/{todo.Id}", todo);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine(ex.Message);
-        return Results.Problem("Unexpected server error");
-    }
-});
-app.MapDelete("/todos/{id}", (int id) =>
-{
-        var todo = todoItems.FirstOrDefault(t => t.Id == id);
-        if (todo is null)
-        {
-            return Results.NotFound();
-        }
-        todoItems.Remove((TodoItem)todo);
-        return Results.Ok(true);
-});
-app.MapPut("/todos/{id}",  (int id, TodoItem todo) =>
-{
-    var existingTodo = todoItems.FirstOrDefault(t => t.Id == id);
-
-    if (existingTodo is null)
-        return Results.NotFound();
-
-    if (string.IsNullOrWhiteSpace(todo.Title) || todo.Title.Length < 3)
-        return Results.BadRequest("Title must be at least 3 characters");
-
-    existingTodo.Title = todo.Title;
-    existingTodo.IsCompleted = todo.IsCompleted;
-
-    return Results.Ok(existingTodo);
-
-});
 app.Run();
