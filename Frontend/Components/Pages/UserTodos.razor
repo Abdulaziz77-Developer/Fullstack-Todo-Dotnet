@@ -1,0 +1,232 @@
+@page "/my-todos"
+@using Frontend.Services
+@using Frontend.Models
+@using System.IdentityModel.Tokens.Jwt
+@using System.Security.Claims
+@inject TodoUserService TodoService
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@rendermode InteractiveServer
+
+<div class="page-wrapper">
+    <div class="container py-5">
+        
+        <div class="todo-header-card shadow-sm mb-5 @(todos?.Any() == true && todos.All(t => t.IsCompleted) ? "all-done-bg" : "")">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    @if (todos != null && todos.Any(t => !t.IsCompleted))
+                    {
+                        var nextTask = todos.First(t => !t.IsCompleted);
+                        <h1 class="display-6 fw-bold text-white mb-2 animate-text">Следующая задача:</h1>
+                        <p class="text-white mb-0 fs-3 fw-light">
+                            <i class="bi bi-arrow-right-circle-fill me-2"></i> @nextTask.Title
+                        </p>
+                    }
+                    else if (todos != null && todos.Any() && todos.All(t => t.IsCompleted))
+                    {
+                        <h1 class="display-5 fw-bold text-white mb-2 animate-pop">🎉 Всё готово!</h1>
+                        <p class="text-white-50 mb-0 fs-5">Вы выполнили все задачи на сегодня.</p>
+                    }
+                    else
+                    {
+                        <h1 class="display-5 fw-bold text-white mb-2">Мой план дел</h1>
+                        <p class="text-white-50 mb-0 fs-5">Управляйте своими задачами эффективно</p>
+                    }
+                </div>
+                
+                <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                    <div class="stats-badge shadow-sm">
+                        <span class="stats-label text-white-50">Прогресс:</span>
+                        <span class="stats-value text-white ms-2">
+                            @(todos?.Count(t => t.IsCompleted) ?? 0) / @(todos?.Count ?? 0)
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="d-flex flex-column align-items-center justify-content-center mt-5 py-5">
+                <div class="spinner-grow text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+                <h4 class="text-muted mt-4">Загрузка данных...</h4>
+            </div>
+        }
+        else if (todos == null || !todos.Any())
+        {
+            <div class="empty-state text-center py-5 shadow-sm rounded-4 bg-white border border-dashed">
+                <i class="bi bi-clipboard-plus display-1 text-light mb-4"></i>
+                <h3 class="text-secondary">Здесь пока пусто</h3>
+                <p class="text-muted">Время добавить свою первую задачу!</p>
+            </div>
+        }
+        else
+        {
+            <div class="row g-4">
+                @foreach (var todo in todos)
+                {
+                    <div class="col-xl-4 col-lg-6 col-md-6">
+                        <div class="todo-item-card @(todo.IsCompleted ? "completed" : "") shadow-sm">
+                            <div class="card-content">
+                                <div class="todo-check">
+                                    @if (!todo.IsCompleted)
+                                    {
+                                        <input class="form-check-input custom-checkbox" type="checkbox" 
+                                               checked="false"
+                                               @onchange="() => ToggleStatus(todo)">
+                                    }
+                                    else
+                                    {
+                                        <div class="done-icon animate-pop">
+                                            <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="todo-text ms-3">
+                                    <h5 class="todo-title">@todo.Title</h5>
+                                    <span class="todo-tag">@(todo.IsCompleted ? "Завершено" : "Активна")</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .page-wrapper { background-color: #f4f7f6; min-height: 100vh; }
+    
+    .todo-header-card { 
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+        padding: 3rem; 
+        border-radius: 2rem; 
+        transition: all 0.6s ease; 
+    }
+
+    .all-done-bg { 
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important; 
+    }
+
+    .stats-badge { 
+        background: rgba(255, 255, 255, 0.15); 
+        backdrop-filter: blur(8px); 
+        padding: 1rem 1.5rem; 
+        border-radius: 1.2rem; 
+        display: inline-block; 
+        border: 1px solid rgba(255, 255, 255, 0.2); 
+    }
+    
+    .todo-item-card { 
+        background: white; border-radius: 1.5rem; padding: 1.8rem; 
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        border: 1px solid rgba(0,0,0,0.05); height: 100%; display: flex; align-items: center; 
+    }
+
+    .todo-item-card:hover { 
+        transform: translateY(-5px); 
+        box-shadow: 0 15px 30px rgba(0,0,0,0.08) !important; 
+    }
+    
+    .card-content { display: flex; align-items: center; width: 100%; }
+    
+    .todo-title { font-weight: 600; color: #2d3436; margin-bottom: 2px; font-size: 1.15rem; transition: 0.3s; }
+    
+    .todo-item-card.completed { 
+        background-color: #f8f9fa; 
+        border: 1px solid #e9ecef; 
+        box-shadow: none !important;
+    }
+
+    .todo-item-card.completed .todo-title { 
+        text-decoration: line-through; 
+        color: #adb5bd; 
+    }
+    
+    .custom-checkbox { 
+        width: 1.8rem; height: 1.8rem; 
+        border-radius: 0.6rem; 
+        cursor: pointer; 
+        border: 2px solid #4facfe; 
+        background-color: white; 
+        transition: 0.2s; 
+    }
+
+    .custom-checkbox:hover { border-color: #00f2fe; background-color: #f0faff; }
+
+    .todo-tag { 
+        font-size: 0.7rem; text-transform: uppercase; font-weight: 700; 
+        padding: 2px 10px; border-radius: 20px; 
+        background: #e3f2fd; color: #1976d2; 
+    }
+
+    .completed .todo-tag { background: #d4edda; color: #155724; }
+
+    .animate-pop { animation: zoomIn 0.3s ease-out; }
+    .animate-text { animation: fadeInDown 0.6s ease; }
+
+    @@keyframes zoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @@keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+@code {
+    private List<TodoItem>? todos;
+    private bool isLoading = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            
+            // Если токена нет - на логин
+            if (string.IsNullOrEmpty(token)) 
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            // ПРОВЕРКА РОЛИ АДМИНА
+            try 
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwtToken = handler.ReadJwtToken(token);
+                var role = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role || c.Type == "role")?.Value;
+
+                if (role == "Admin")
+                {
+                    // Если роль Admin - перекидываем в админку
+                    Navigation.NavigateTo("/admin-dashboard");
+                    return;
+                }
+            }
+            catch 
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            // Если всё хорошо и это пользователь - грузим данные
+            await LoadTodos();
+        }
+    }
+
+    private async Task LoadTodos()
+    {
+        isLoading = true;
+        try { todos = await TodoService.GetMyTodosAsync(); }
+        catch { Navigation.NavigateTo("/login"); }
+        finally { isLoading = false; StateHasChanged(); }
+    }
+
+    private async Task ToggleStatus(TodoItem todo)
+    {
+        var success = await TodoService.ToggleTodoAsync(todo.Id);
+        if (success)
+        {
+            todo.IsCompleted = true; // Визуально обновляем статус
+            StateHasChanged();
+        }
+    }
+}

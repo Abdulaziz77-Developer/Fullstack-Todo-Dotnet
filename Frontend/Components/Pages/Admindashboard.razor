@@ -1,0 +1,232 @@
+@page "/admin-dashboard"
+@using Frontend.Services
+@using Frontend.Models
+@inject AdminService AdminService
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@rendermode InteractiveServer
+
+<div class="admin-wrapper">
+    <div class="container py-5">
+        
+        @* HEADER *@
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="fw-bold text-dark mb-1">Панель администратора</h1>
+                <p class="text-muted">Управление всеми задачами системы</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary shadow-sm rounded-circle p-3 line-height-1" @onclick="ShowCreateForm">
+                    <i class="bi bi-plus-lg fs-4"></i>
+                </button>
+                <button class="btn btn-outline-danger shadow-sm" @onclick="Logout">
+                    <i class="bi bi-box-arrow-left me-2"></i> Выйти
+                </button>
+            </div>
+        </div>
+
+        @* SEARCH BAR *@
+        <div class="card border-0 shadow-sm mb-4 rounded-4">
+            <div class="card-body p-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control border-0 shadow-none" placeholder="Поиск задачи или пользователя..." 
+                           @bind="searchQuery" @bind:event="oninput" />
+                </div>
+            </div>
+        </div>
+
+        @* CREATE FORM (Показывается при нажатии +) *@
+        @if (showCreateForm)
+        {
+            <div class="card border-0 shadow mb-4 rounded-4 animate-fade-in">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3">Новая задача</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <input class="form-control" placeholder="Название задачи" @bind="newTodoTitle" />
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select" @bind="selectedUserId">
+                                <option value="0">Выберите пользователя...</option>
+                                @foreach (var user in allUsers)
+                                {
+                                    <option value="@user.Id">@user.UserName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" @onclick="CreateTodo">Создать</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (isLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive shadow-sm rounded-4 bg-white p-3">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="p-3 border-0">Задача</th>
+                            <th class="p-3 border-0">Пользователь</th>
+                            <th class="p-3 border-0 text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var todo in FilteredTodos)
+                        {
+                            <tr>
+                                <td class="p-3">
+                                    <div class="fw-bold">@todo.Title</div>
+                                    @if (todo.IsCompleted) { <span class="badge bg-success">Готово</span> }
+                                    else { <span class="badge bg-warning text-dark">В работе</span> }
+                                </td>
+                                <td class="p-3 text-muted">@todo.UserName</td>
+                                <td class="p-3 text-end">
+                                    <button class="btn btn-sm btn-outline-primary me-2 border-0" @onclick="() => OpenEditModal(todo)">
+                                        <i class="bi bi-pencil-square fs-5"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => DeleteTodo(todo.Id)">
+                                        <i class="bi bi-trash3 fs-5"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@* MODAL FOR EDIT *@
+@if (showEditModal)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal show d-block animate-pop" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">Редактировать задачу</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Название</label>
+                        <input class="form-control" @bind="editingTodo.Title" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Владелец</label>
+                        <select class="form-select" @bind="editingTodoUserId">
+                            @foreach (var user in allUsers)
+                            {
+                                <option value="@user.Id">@user.UserName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-light" @onclick="CloseEditModal">Отмена</button>
+                    <button class="btn btn-primary px-4" @onclick="UpdateTodo">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TodoAdminResponseDto> allTodos = new();
+    private List<UserDto> allUsers = new(); // Для Select
+    private bool isLoading = true;
+    private string searchQuery = "";
+    
+    // Create state
+    private bool showCreateForm = false;
+    private string newTodoTitle = "";
+    private int selectedUserId;
+
+    // Edit state
+    private bool showEditModal = false;
+    private TodoAdminResponseDto editingTodo = new();
+    private int editingTodoUserId;
+
+    private IEnumerable<TodoAdminResponseDto> FilteredTodos => 
+        allTodos.Where(t => t.Title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) || 
+                            t.UserName.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { await LoadData(); }
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try {
+            allTodos = await AdminService.GetAllTodosAsync();
+            allUsers = await AdminService.GetAllUsersAsync(); // Загружаем список юзеров для select
+        } catch { Navigation.NavigateTo("/login"); }
+        finally { isLoading = false; StateHasChanged(); }
+    }
+
+    private void ShowCreateForm() => showCreateForm = !showCreateForm;
+
+    private async Task CreateTodo()
+    {
+        if (string.IsNullOrEmpty(newTodoTitle) || selectedUserId == 0) return;
+        var success = await AdminService.CreateTodoAsync(newTodoTitle, selectedUserId);
+        if (success) { 
+            newTodoTitle = ""; 
+            showCreateForm = false;
+            await LoadData(); 
+        }
+    }
+
+    private async Task DeleteTodo(int id)
+    {
+        if (await AdminService.DeleteTodoAsync(id)) await LoadData();
+    }
+
+    private void OpenEditModal(TodoAdminResponseDto todo)
+    {
+        editingTodo = new TodoAdminResponseDto { Id = todo.Id, Title = todo.Title, UserName = todo.UserName };
+        // Находим Id пользователя по имени (или храни его в DTO)
+        editingTodoUserId = allUsers.FirstOrDefault(u => u.UserName == todo.UserName)?.Id ?? 0;
+        showEditModal = true;
+    }
+
+    private void CloseEditModal() => showEditModal = false;
+
+    private async Task UpdateTodo()
+    {
+        if (await AdminService.UpdateTodoAsync(editingTodo.Id, editingTodo.Title, editingTodoUserId))
+        {
+            showEditModal = false;
+            await LoadData();
+        }
+    }
+
+    private async Task Logout()
+    {
+        await LocalStorage.RemoveItemAsync("authToken");
+        Navigation.NavigateTo("/login");
+    }
+}
+
+<style>
+    .admin-wrapper { background-color: #f4f7f6; min-height: 100vh; }
+    .rounded-4 { border-radius: 1.2rem !important; }
+    .animate-fade-in { animation: fadeIn 0.4s ease; }
+    .animate-pop { animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .modal-backdrop { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @@keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+</style>
