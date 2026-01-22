@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MinimalApiTodo.DTOs;
+using MinimalApiTodo.Models;
 
 namespace MinimalApiTodo.Data
 {

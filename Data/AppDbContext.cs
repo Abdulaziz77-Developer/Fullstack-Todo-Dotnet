@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-
+using MinimalApiTodo.Models;
 namespace MinimalApiTodo.Data
 {
     public class AppDbContext : DbContext

@@ -1,4 +1,4 @@
-namespace MinimalApiTodo;
+namespace MinimalApiTodo.Models;
 public class TodoItem
 {
     public int Id { get; set; }
